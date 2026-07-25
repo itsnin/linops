@@ -32,7 +32,10 @@
 # ============================================================================
 set -euo pipefail
 
-# Re-exec as root if not already root (so `./debloat.sh` without sudo works).
+# Re-exec as root if not already root. This guard is for users who run
+# the script as a downloaded file (e.g. `bash debloat.sh` without sudo).
+# When run via `curl | sudo bash` (the recommended method), sudo is
+# already on the outer command, so this branch is skipped.
 if [ "$(id -u)" -ne 0 ]; then
   exec sudo "$0" "$@"
 fi
@@ -272,7 +275,7 @@ apt-get remove -y gnome-core 2>/dev/null || true
 #    (gnome-core) or that aren't installed on Ubuntu Server
 #    (cinnamon-desktop-environment, phosh-*, ubuntu-mate-*, etc.).
 #
-#    *** NOT IN THIS LIST (would break GNOME — see header) ***
+#    *** NOT IN THIS LIST (would break GNOME — see section 4(c)) ***
 #       ubuntu-wallpapers-resolute, ubuntu-wallpapers, tecla
 # ---------------------------------------------------------------------------
 echo "==> Removing optional GNOME apps (bloat)"
@@ -299,7 +302,7 @@ apt-get remove -y --purge snapd 2>/dev/null || true
 # ---------------------------------------------------------------------------
 # 11. Pin everything we don't want, so apt upgrade can NEVER reinstall it.
 #
-#     *** DO NOT PIN (would break GNOME — see header) ***
+#     *** DO NOT PIN (would break GNOME — see section 4(c)) ***
 #        ubuntu-wallpapers-resolute   (hard dep of ubuntu-wallpapers)
 #        ubuntu-wallpapers            (hard dep of gnome-shell)
 #        tecla                        (hard dep of gnome-shell)
