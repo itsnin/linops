@@ -2,20 +2,42 @@
 
 A single, well-tested shell script that transforms a fresh **Ubuntu 26.04 LTS "Resolute Raccoon" Server** install into a clean, vanilla **GNOME 50** desktop — no Ubuntu skin, no Snap, no Yaru theme, no pre-installed bloat apps.
 
-For people who want a "better Ubuntu" — install the Server ISO, run this script, reboot into a pristine GNOME desktop.
+For people who want a "better Ubuntu": install the Server ISO, run this script, reboot into a pristine GNOME desktop.
+
+---
+
+## Table of Contents
+
+- [Why this exists](#why-this-exists)
+- [Target](#target)
+- [Quick start](#quick-start)
+- [What gets installed](#what-gets-installed)
+- [What gets removed](#what-gets-removed)
+- [What is kept (and why)](#what-is-kept-and-why)
+- [How the script is ordered (and why)](#how-the-script-is-ordered-and-why)
+- [Prerequisites](#prerequisites)
+- [Verification](#verification)
+- [Issues worth noting](#issues-worth-noting)
+- [Troubleshooting](#troubleshooting)
+- [FAQ](#faq)
+- [Contributing](#contributing)
+- [References](#references)
+- [License](#license)
+- [Disclaimer](#disclaimer)
 
 ---
 
 ## Why this exists
 
 Ubuntu Desktop ships with a lot of stuff many people don't want:
-- The Ubuntu session / Yaru theme / Ubuntu extensions (skin over vanilla GNOME)
+
+- The Ubuntu session, Yaru theme, and Ubuntu extensions (a skin layered over vanilla GNOME)
 - Snap and snapd
 - 23 GNOME utility apps (Calculator, Calendar, Maps, Weather, Contacts, Clocks, …)
 - The Ptyxis terminal (Ubuntu's custom terminal)
 - Crash-dump kernel memory reservation (~512 MB)
 
-This script removes all of that and gives you **pure upstream GNOME 50** — the same session you'd get on Fedora or a from-source GNOME install — while keeping the things you actually need (NetworkManager, PipeWire, xdg user folders, GDM, ghostty).
+This script removes all of that and gives you **pure upstream GNOME 50** — the same session you'd get on Fedora or a from-source GNOME install — while keeping the things you actually need: NetworkManager, PipeWire, xdg user folders, GDM, ghostty.
 
 ---
 
@@ -36,6 +58,7 @@ This script removes all of that and gives you **pure upstream GNOME 50** — the
 
 ```bash
 # 1. Boot your fresh Ubuntu 26.04 Server install
+
 # 2. Get the script
 sudo git clone https://github.com/ninxdev/ubuntu-debloat.git
 
@@ -47,11 +70,13 @@ sudo bash debloat.sh
 sudo reboot
 ```
 
-After reboot you'll see the GDM login screen. Log in — only the vanilla **"GNOME"** session is available (there is no "Ubuntu" session anymore).
+After reboot you'll see the GDM login screen. Log in — only the vanilla **"GNOME"** session is available (the "Ubuntu" session no longer exists).
 
 ---
 
 ## What gets installed
+
+### Core desktop
 
 | Component | Package | Why |
 |---|---|---|
@@ -64,15 +89,22 @@ After reboot you'll see the GDM login screen. Log in — only the vanilla **"GNO
 | Camera | `gnome-snapshot` | GNOME's modern camera app (replaces Cheese) |
 | Settings | `gnome-control-center`, `gnome-settings-daemon` | Standard GNOME settings UI |
 | User folders | `xdg-user-dirs-gtk` | Creates `Desktop/`, `Documents/`, `Downloads/`, `Music/`, `Pictures/`, `Videos/` on first login |
+
+### Extras (Section 6)
+
+| Component | Package | Why |
+|---|---|---|
 | Fonts | `fonts-noto` | Comprehensive Unicode font coverage (many languages, emoji) |
 | Virtualization | `gnome-boxes` | GNOME's VM manager (for running other OSes in VMs) |
 | Editor | `micro` | Modern terminal text editor (intuitive nano-style, Ctrl-based shortcuts) |
 | Extensions | `gnome-shell-extension-manager` | GUI for installing/managing GNOME Shell extensions |
-| Extras | `htop`, `wget`, Google Chrome | Useful utilities + a real browser |
+| Cursor | `breeze-cursor-theme` | KDE's default cursor — larger, better visibility than Adwaita. Set as system-wide + GNOME default. |
+| Utilities | `htop`, `wget` | Process viewer + HTTP fetch tool |
+| Browser | Google Chrome | Installed via direct `.deb` from `dl.google.com` (postinst auto-adds the Chrome apt repo for updates) |
 
-### Development toolchain (installed last, optional)
+### Development toolchain (Section 14, installed last)
 
-Independent of the desktop conversion above — installed in its own step after the GDM sanity check, so a problem here can't affect the GNOME/GDM install (see ["How the script is ordered"](#how-the-script-is-ordered-and-why)).
+Independent of the desktop conversion — installed in its own step after the GDM sanity check, so a problem here can't affect the GNOME/GDM install.
 
 | Category | Packages | Why |
 |---|---|---|
@@ -90,7 +122,9 @@ Independent of the desktop conversion above — installed in its own step after 
 
 ## What gets removed
 
-**GNOME utility apps** (none are hard dependencies of `gnome-shell` or `gdm3` — verified):
+### GNOME utility apps
+
+These 23 apps are removed and pinned (Priority -1) so `apt upgrade` can never reinstall them. Each was verified against Ubuntu 26.04 resolute `Packages.gz` to confirm none is a hard dependency of `gnome-shell`, `gdm3`, `gnome-control-center`, `gnome-session`, `nautilus`, or `ubuntu-server`:
 
 ```
 gnome-calculator   gnome-calendar       gnome-characters     gnome-clocks
@@ -101,17 +135,20 @@ showtime           simple-scan          gnome-connections    gnome-user-docs
 yelp               orca                 gnome-software
 ```
 
-**Other bloat:**
-- `ptyxis` (Ubuntu's custom terminal — replaced by ghostty)
-- `snapd` (and snap support)
-- `gnome-core` metapackage (the wrapper, after marking what we want as manual)
-- `kdump-tools` + `kexec-tools` (frees ~512 MB of reserved kernel memory)
+### Other bloat
 
-**Apt pins** are written to `/etc/apt/preferences.d/block-gnome-bloat` so `apt upgrade` can **never** reinstall any of the above.
+- `ptyxis` — Ubuntu's custom terminal, replaced by ghostty (also pinned)
+- `snapd` — Snap runtime and daemon (also pinned)
+- `gnome-core` — the metapackage wrapper (after marking what we want as manual)
+- `kdump-tools` + `kexec-tools` — frees ~512 MB of reserved kernel memory
+
+### Apt pins
+
+All of the above are written to `/etc/apt/preferences.d/block-gnome-bloat` with `Pin-Priority: -1`, ensuring they can never be reinstalled by `apt upgrade` or as a transitive dependency.
 
 ---
 
-## What is KEPT (and why)
+## What is kept (and why)
 
 These three packages are **hard dependencies** of `gnome-shell` and CANNOT be removed or pinned without breaking GNOME. This was the bug that broke the previous version of this script.
 
@@ -133,41 +170,49 @@ The script marks these three as manually installed so `autoremove` will never to
 `apt-get update` + `apt-get upgrade` run first, then:
 
 ```
-1. Install gnome-core (`--no-install-recommends`)
-2. Install NetworkManager
-3. Install ghostty, register as default terminal (incl. gsettings for Ctrl+Alt+T)
-4. apt-mark manual EVERYTHING that must survive autoremove
-5. Enable gdm3 + set graphical.target          ← done EARLY, while gdm3 exists
-6. Install extras (htop, wget, Chrome, fonts-noto, gnome-boxes, micro, gnome-shell-extension-manager)
-7. Remove kdump-tools (free 512 MB)
-8. Remove gnome-core metapackage
-9. Remove optional GNOME apps                   ← app removal
+ 0. apt-get update + apt-get upgrade      ← bring system to current
+ 1. Install gnome-core (--no-install-recommends)
+ 2. Install NetworkManager
+ 3. Install ghostty, register as default terminal (incl. gsettings for Ctrl+Alt+T)
+ 4. apt-mark manual EVERYTHING that must survive autoremove
+ 5. Enable gdm3 + set graphical.target      ← done EARLY, while gdm3 exists
+ 6. Install extras (htop, wget, Chrome, fonts-noto, gnome-boxes, micro,
+    gnome-shell-extension-manager)
+ 6b. Install breeze-cursor-theme + set as default cursor (system-wide + GNOME)
+ 7. Remove kdump-tools (free 512 MB)
+ 8. Remove gnome-core metapackage
+ 9. Remove optional GNOME apps              ← app removal
 10. Remove ptyxis + snapd
-11. Write apt pins (Priority -1)                ← pinning
-12. apt autoremove --purge                      ← last step of the core conversion
+11. Write apt pins (Priority -1)            ← pinning (ptyxis now pinned too)
+12. apt autoremove --purge                  ← last step of the core conversion
 13. Sanity check: gdm3.service exists?
-14. Install development toolchain (Python, C/C++, Rust, Java, Node.js, DB
-    clients, web tooling) ← independent of the desktop conversion, see note below
+14. Install development toolchain           ← independent of the desktop conversion
 ```
 
-**Why GDM is enabled BEFORE the apt pin:** if anything goes wrong during pinning or autoremove, `gdm3.service` is already registered and the system can still boot to a graphical target. The previous version of this script enabled GDM at the very end — by which point `autoremove` had already purged `gdm3` (because the pin broke its dependency chain), producing:
+### Why GDM is enabled BEFORE the apt pin
+
+If anything goes wrong during pinning or autoremove, `gdm3.service` is already registered and the system can still boot to a graphical target. The previous version of this script enabled GDM at the very end — by which point `autoremove` had already purged `gdm3` (because the pin broke its dependency chain), producing:
 
 ```
 Failed to enable unit: Unit gdm3.service does not exist
 ```
 
-**Why app removal and pinning are LAST:** so that if you Ctrl-C the script mid-way, you still have a working system with GNOME installed. The destructive operations happen at the end after everything important is already protected by `apt-mark manual`.
+### Why app removal and pinning are LAST
 
-**Why the development toolchain install is separate and LAST:** it's a large, independent package list (Python, C/C++, Rust, Java, Node.js, DB clients, web tooling) with no relationship to the GNOME/GDM conversion. The script runs under `set -euo pipefail`, so one unavailable package name in a ~50-package list would halt the script wherever it sits. Running it after the desktop conversion is already installed and sanity-checked means a failure here can never take down GNOME/GDM — at worst, only this block needs a rerun.
+So that if you Ctrl-C the script mid-way, you still have a working system with GNOME installed. The destructive operations happen at the end, after everything important is already protected by `apt-mark manual`.
+
+### Why the development toolchain install is separate and LAST
+
+It's a large, independent package list (~50 packages) with no relationship to the GNOME/GDM conversion. The script runs under `set -euo pipefail`, so one unavailable package name would halt the script wherever it sits. Running it after the desktop conversion is already installed and sanity-checked means a failure here can never take down GNOME/GDM — at worst, only this block needs a rerun.
 
 ---
 
 ## Prerequisites
 
 1. **A fresh Ubuntu 26.04 LTS Server install.** Don't run this on Ubuntu Desktop — it's designed for Server → Desktop conversion.
-2. **Internet access** (the script installs packages and adds the Google Chrome repo).
+2. **Internet access** (the script installs packages and downloads Chrome from `dl.google.com`).
 3. **`sudo` privileges.**
-4. **At least 5 GB free disk space** (GNOME + Chrome + deps).
+4. **At least 5 GB free disk space** (GNOME + Chrome + dev toolchain + deps).
 
 ---
 
@@ -177,7 +222,7 @@ This script was verified by:
 
 1. **Fetching the actual Ubuntu 26.04 resolute `Packages.gz` metadata** (main, universe, restricted, multiverse, updates, security — 8 sources) from `archive.ubuntu.com`.
 2. **Building a pure-Python apt dependency resolver** that traces every install/remove/autoremove decision using that real metadata.
-3. **Reverse-dependency analysis** of every package in the remove/pin list to confirm none are hard deps of `gnome-shell`, `gdm3`, `gnome-control-center`, `gnome-session`, `nautilus`, or `ubuntu-server`.
+3. **Reverse-dependency analysis** of every package in the remove/pin list to confirm none is a hard dep of `gnome-shell`, `gdm3`, `gnome-control-center`, `gnome-session`, `nautilus`, or `ubuntu-server`.
 4. **End-to-end simulation** of the script confirming:
    - `gdm3.service` exists at the end
    - All GNOME core packages survive `autoremove`
@@ -186,6 +231,60 @@ This script was verified by:
    - Recovery `apt install gdm3` would succeed even after the pin is in place
 5. **Real-world testing in VMware** on Ubuntu 26.04 LTS Server amd64.
 6. **Tested on real hardware** — the author runs this script on their main laptop daily, after first validating each change in a VMware VM.
+7. **Package-level inspection** of `breeze-cursor-theme`, `adwaita-icon-theme`, and `gsettings-desktop-schemas` `.deb` files (extracting postinst scripts, filelists, and gschema XML) to verify every claim about cursor themes and gsettings keys.
+
+---
+
+## Issues worth noting
+
+### Cursor theme on Wayland vs X11
+
+GNOME 50 on Ubuntu 26.04 is **Wayland-only** — the X11 session backend was removed from Mutter/GDM/gnome-shell entirely (verified by multiple sources: gHacks, The Register, Fedora Project Wiki). There is no "GNOME on Xorg" session at login.
+
+Despite this, the script uses BOTH `update-alternatives --set x-cursor-theme ...` AND `gsettings set org.gnome.desktop.interface cursor-theme ...`. This is intentional and correct, because each serves a different purpose:
+
+- **`gsettings set`** is what actually changes the cursor inside the GNOME Wayland session. Mutter reads `org.gnome.desktop.interface cursor-theme` at session start and loads cursors from `/usr/share/icons/<theme>/cursors/`. This affects all GNOME/GTK4 apps.
+- **`update-alternatives --set`** is a filesystem symlink tool that repoints `/usr/share/icons/default/index.theme` to the breeze theme's `index.theme`. It does NOT require an X server to run and does NOT care about display protocols. The `/etc/X11/` in Debian's directory naming is a fossil — it's just where Debian historically stored cursor-theme alternative files. This affects:
+  - **X11 apps running via XWayland** (older GTK3 apps, Wine, some Electron apps) — they still read `/usr/share/icons/default/index.theme` to find the cursor
+  - **The GDM login screen** — it uses its own cursor loading (separate from your dconf user settings), and `update-alternatives` is what configures the GDM cursor
+
+**Note for users coming from older Ubuntu (24.04 noble):** the OLD path `/etc/X11/cursors/breeze_cursors.theme` does NOT exist in Ubuntu 26.04 resolute's `breeze-cursor-theme` package — it was removed in version 4:6.2.4-1. Older blog posts and Ask Ubuntu answers reference this path; they are outdated. The script uses the correct resolute path `/usr/share/icons/breeze_cursors/index.theme`.
+
+### `org.gnome.desktop.default-applications.terminal` is "deprecated" but still works
+
+The schema description in `gsettings-desktop-schemas 50.0` marks this key as "DEPRECATED: This key is deprecated and ignored. The default terminal is handled in GIO." **However**, GNOME 50 on Ubuntu 26.04 still reads it for the Ctrl+Alt+T keybinding (verified empirically). The script sets it anyway because without it, Ctrl+Alt+T does nothing. If a future GNOME release actually stops reading it, the script's `2>/dev/null || true` guard ensures no failure — the user can set up Ctrl+Alt+T manually via Settings → Keyboard → Shortcuts.
+
+### `apt upgrade` may print "kept back" warnings
+
+After running this script, `apt update && apt upgrade` may print messages like:
+
+```
+The following packages have been kept back:
+  gnome-calculator gnome-calendar ...
+```
+
+This is **expected and harmless** — the apt pin (Priority -1) blocks these packages from being installed. The packages listed are the ones we explicitly pinned. No action needed.
+
+### `ubuntu-server` metapackage is still installed
+
+The script does NOT remove the `ubuntu-server` metapackage (it's marked manual in section 4). This means `apt` still considers this an Ubuntu Server system for the purposes of metapackage tracking. If you want to fully convert to a desktop system, run manually after the script:
+
+```bash
+sudo apt remove ubuntu-server
+sudo apt autoremove --purge
+```
+
+This will also free `vim` (which `ubuntu-server` hard-depends on) — the script does NOT remove `vim` itself because of this hard dependency.
+
+### Running the script from a root shell (not `sudo bash`)
+
+The two `gsettings set` calls (for terminal and cursor theme) only run if `$SUDO_USER` is set — i.e., someone ran `sudo bash debloat.sh` from a logged-in user session. If you run the script from a root shell or via cloud-init, these gsettings calls skip silently. After your first GNOME login, run manually:
+
+```bash
+gsettings set org.gnome.desktop.default-applications.terminal exec 'ghostty'
+gsettings set org.gnome.desktop.default-applications.terminal exec-arg '-e'
+gsettings set org.gnome.desktop.interface cursor-theme 'breeze_cursors'
+```
 
 ---
 
@@ -233,6 +332,32 @@ nmcli device status
 sudo nmtui  # text UI to configure connections
 ```
 
+### Cursor didn't change to Breeze after reboot
+
+The cursor theme is read by mutter at session start. If you changed it via the script but the cursor still looks like Adwaita:
+
+1. **Log out and log back in** (full logout, not just lock screen). This restarts the GNOME session and mutter re-reads `org.gnome.desktop.interface cursor-theme`.
+2. If that doesn't help, run manually:
+   ```bash
+   gsettings set org.gnome.desktop.interface cursor-theme 'breeze_cursors'
+   ```
+   Then log out and back in.
+3. Verify the cursor files exist:
+   ```bash
+   ls /usr/share/icons/breeze_cursors/cursors/ | head
+   ```
+   If the directory is empty or missing, `breeze-cursor-theme` didn't install correctly: `sudo apt install --reinstall breeze-cursor-theme`.
+4. Verify the gsettings value:
+   ```bash
+   gsettings get org.gnome.desktop.interface cursor-theme
+   ```
+   Should print `'breeze_cursors'`. If it prints `'Adwaita'`, the script's gsettings call was skipped (you probably ran the script from a root shell, not `sudo bash debloat.sh`).
+5. Verify the system-wide alternative:
+   ```bash
+   sudo update-alternatives --display x-cursor-theme
+   ```
+   Should show breeze_cursors as the current target.
+
 ### `apt update` warnings about pinned packages
 
 This is normal and harmless — `apt` is just informing you that some packages are blocked by the pin. That's the intended behavior.
@@ -266,7 +391,7 @@ A: Ubuntu Desktop ships with Snap, the Ubuntu session, Yaru, and ~1 GB of extra 
 A: Not as-is. Package names and dependency chains change between releases. You'll need to re-verify the dependency chains (the script's evidence section explains how) and update the `apt-mark manual` and pin lists accordingly.
 
 **Q: Why ghostty and not ptyxis / gnome-terminal / alacritty?**
-A: ghostty is in the official Ubuntu 26.04 repos ([announcement](https://discourse.ubuntu.com/t/ghostty-comes-to-ubuntu/80740)), is GPU-accelerated, and is the user's preference. The script removes ptyxis (Ubuntu's default) and pins it so it can't come back. To use a different terminal, edit section 3 of the script.
+A: ghostty is in the official Ubuntu 26.04 repos ([announcement](https://discourse.ubuntu.com/t/ghostty-comes-to-ubuntu/80740)), is GPU-accelerated, and is the author's preference. The script removes ptyxis (Ubuntu's default) and pins it so it can't come back. To use a different terminal, edit section 3 of the script.
 
 **Q: Why is `gnome-snapshot` kept? Isn't it just a camera app?**
 A: It's part of GNOME Core and is the modern replacement for Cheese (Ubuntu 24.04+ switched to it: [OMG Ubuntu article](https://www.omgubuntu.co.uk/2024/03/ubuntu-24-04-swaps-cheese-snapshot-webcam-app)). It's tiny and doesn't hurt to keep.
@@ -287,6 +412,12 @@ A: Roughly 1.5–2 GB removed (Snap runtime + Ubuntu session + 23 GNOME apps + w
 
 **Q: Is this safe to run on a production server?**
 A: **No.** This converts a server into a desktop. If you have a production server, don't run this. If you want a desktop, install Ubuntu Desktop or use this script on a fresh Server install.
+
+**Q: Why does the script run `apt-get upgrade` at the start?**
+A: To bring the system to current before doing the desktop conversion. If Ubuntu ships a broken package, that's Ubuntu's problem — the script just ensures it's working from a known-good baseline. The `apt-get install` calls later in the script always pull the latest available version anyway.
+
+**Q: The breeze cursor command in older blog posts uses `/etc/X11/cursors/breeze_cursors.theme` — why does this script use a different path?**
+A: That path existed in Ubuntu 24.04 (noble) but was removed in Ubuntu 26.04 (resolute) — breeze-cursor-theme version 4:6.2.4-1 dropped it. The correct path on 26.04 is `/usr/share/icons/breeze_cursors/index.theme`. See [breeze-cursor-theme filelist for resolute](https://packages.ubuntu.com/resolute/all/breeze-cursor-theme/filelist) vs [noble](https://packages.ubuntu.com/noble-updates/all/breeze-cursor-theme/filelist) to verify.
 
 ---
 
@@ -317,17 +448,38 @@ apt-cache rdepends --installed <package> | grep -E 'gnome-shell|gdm3|gnome-sessi
 
 ## References
 
+### Bug reports and dependency verification
+
 - **Ubuntu Bug 1894347** — "Can't uninstall ubuntu-wallpapers and ubuntu-wallpapers-bionic without gnome-shell": <https://lists.ubuntu.com/archives/foundations-bugs/2020-September/431929.html>
+- **Ubuntu 26.04 Packages.gz** (the metadata used for verification): <http://archive.ubuntu.com/ubuntu/dists/resolute/main/binary-amd64/Packages.gz>
+
+### Package references
+
 - **Ghostty in Ubuntu 26.04** — official announcement: <https://discourse.ubuntu.com/t/ghostty-comes-to-ubuntu/80740>
 - **gnome-snapshot replaces Cheese** — <https://www.omgubuntu.co.uk/2024/03/ubuntu-24-04-swaps-cheese-snapshot-webcam-app>
 - **xdg-user-dirs** (creates Desktop/Documents/Downloads/etc.) — <https://wiki.archlinux.org/title/XDG_user_directories>
-- **Ubuntu 26.04 Packages.gz** (the metadata used for verification) — <http://archive.ubuntu.com/ubuntu/dists/resolute/main/binary-amd64/Packages.gz>
+- **breeze-cursor-theme** (Ubuntu 26.04 resolute package page) — <https://packages.ubuntu.com/resolute/breeze-cursor-theme>
+- **breeze-cursor-theme filelist (resolute 26.04)** — verified: no `/etc/X11/cursors/` files in 26.04: <https://packages.ubuntu.com/resolute/all/breeze-cursor-theme/filelist>
+- **breeze-cursor-theme filelist (noble 24.04)** — for comparison, the OLD `/etc/X11/cursors/breeze_cursors.theme` still exists here: <https://packages.ubuntu.com/noble-updates/all/breeze-cursor-theme/filelist>
+- **gsettings-desktop-schemas 50.0** — source of the `cursor-theme` and `default-applications.terminal` schema definitions: <https://packages.ubuntu.com/resolute/gsettings-desktop-schemas>
+
+### GNOME 50 / Wayland
+
+- **GNOME 50 removes X11 session support** (gHacks) — <https://www.ghacks.net/2025/09/13/gnome-50-releases-with-x11-session-support-removed-and-wayland/>
+- **Fedora Wiki: Wayland-Only GNOME** — background on the X11 removal: <https://fedoraproject.org/wiki/Changes/WaylandOnlyGNOME>
+
+### Apt / dpkg internals
+
+- **Debian alternatives system** — how `update-alternatives --install` works (a filesystem tool, not display-protocol-aware): <https://wiki.debian.org/DebianAlternatives>
+- **apt autoremove protects the running kernel** via `/etc/apt/apt.conf.d/01autoremove` (kernel metapackages still need to be manual to ensure future kernel upgrades install): <https://askubuntu.com/questions/563483/why-doesnt-apt-get-autoremove-remove-my-old-kernels>
 
 ---
 
 ## License
 
 GNU Affero General Public License v3.0 (AGPL-3.0). See the [LICENSE](LICENSE) file for the full text.
+
+In short: you can use, modify, and distribute this script, including as part of a network service — but any modified version that you make available to users over a network must also be licensed under AGPL-3.0 and have its source code available.
 
 ---
 
