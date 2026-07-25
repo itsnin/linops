@@ -25,10 +25,11 @@
 #   2. apt-mark manual EVERYTHING that must survive (so autoremove is safe)
 #   3. Enable GDM + graphical.target  ← done EARLY, while gdm3 is fresh
 #   4. Install user extras (htop, wget, fonts-noto, gnome-boxes, micro, gnome-shell-extension-manager, Chrome)
-#   5. Remove kdump-tools (free 512 MB)
-#   6. ONLY THEN remove optional GNOME apps and write apt pins
-#   7. autoremove --purge as the very last step
-#   8. Install development toolchain (separate, optional, last)
+#   5. Set breeze-cursor-theme as default cursor (system-wide + GNOME)
+#   6. Remove kdump-tools (free 512 MB)
+#   7. ONLY THEN remove optional GNOME apps and write apt pins
+#   8. autoremove --purge as the very last step
+#   9. Install development toolchain (separate, optional, last)
 #
 # ============================================================================
 # THE BUG THAT BROKE THE PREVIOUS SCRIPT (verified, see evidence at bottom)
@@ -182,9 +183,131 @@ echo "==> Installing htop, wget, fonts-noto, gnome-boxes, micro, gnome-shell-ext
 apt-get install -y htop wget fonts-noto gnome-boxes micro gnome-shell-extension-manager
 
 echo "==> Installing Google Chrome (direct .deb)"
+# Download Chrome's official .deb directly from Google.
+# Using `apt-get install ./file.deb` (instead of `dpkg -i`) lets apt resolve
+# Chrome's dependencies (e.g., libu2f-udev, fonts-liberation) automatically.
+# The .deb's postinst adds Google's signing key + repo to
+# /etc/apt/sources.list.d/google-chrome.list, so future `apt upgrade`
+# pulls Chrome updates natively.
+# Source: https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
 wget -q -O /tmp/google-chrome-stable.deb https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
 apt-get install -y /tmp/google-chrome-stable.deb || echo "Chrome install failed (continuing)"
 rm -f /tmp/google-chrome-stable.deb
+
+# ---------------------------------------------------------------------------
+# 6b. Breeze cursor theme (KDE's default cursor) — set as system-wide default.
+#
+#     Why: GNOME's default Adwaita cursor is white/small; Breeze is larger,
+#     has better visibility, and matches what KDE/Plasma users expect.
+#
+#     IMPLEMENTATION NOTES (verified, see evidence at bottom):
+#
+#     (1) `apt install breeze-cursor-theme`
+#         Installs cursor files to /usr/share/icons/breeze_cursors/cursors/
+#         and /usr/share/icons/Breeze_Light/cursors/.
+#         Package: breeze-cursor-theme 4:6.6.5-0ubuntu0.1 (resolute-updates/
+#         universe). Depends: (none). ~30 MB installed.
+#         Source: https://packages.ubuntu.com/resolute/breeze-cursor-theme
+#
+#     (2) `update-alternatives --install ... x-cursor-theme ...`
+#         Registers breeze as an option in the x-cursor-theme alternatives
+#         system. The MASTER link is /usr/share/icons/default/index.theme
+#         (verified by reading adwaita-icon-theme's postinst, which uses the
+#         same master link). breeze-cursor-theme's own postinst does NOT
+#         register an alternative (it only runs update-icon-caches), so we
+#         must register it manually.
+#         We use /usr/share/icons/breeze_cursors/index.theme as the slave
+#         path (the only .theme file breeze-cursor-theme ships in 26.04).
+#
+#         *** IMPORTANT: the OLD path /etc/X11/cursors/breeze_cursors.theme
+#             does NOT exist in Ubuntu 26.04's breeze-cursor-theme package.
+#             It was removed in version 4:6.2.4-1 (verified by reading the
+#             postinst's dpkg-maintscript-helper rm_conffile call, and by
+#             fetching the filelist from packages.ubuntu.com/resolute).
+#             Older blog posts / Ask Ubuntu answers reference this path —
+#             they are OUTDATED (the file still exists in noble 24.04 but
+#             was dropped for resolute 26.04). ***
+#
+#         *** WHY USE `update-alternatives` ON WAYLAND-ONLY GNOME 50? ***
+#         GNOME 50 removed the X11 session backend from Mutter/GDM/gnome-shell
+#         (verified by multiple sources: XDA, gHacks, The Register, Fedora
+#         Project Wiki). There is no "GNOME on Xorg" session at login.
+#         HOWEVER, `update-alternatives --set x-cursor-theme` is still
+#         useful and correct on Wayland-only GNOME 50, because:
+#           (a) `update-alternatives` is a filesystem symlink tool — it
+#               repoints /usr/share/icons/default/index.theme to whatever
+#               path you specify. It does NOT require an X server to run
+#               and does NOT care about display protocols.
+#           (b) The "/etc/X11/" in Debian's directory naming convention
+#               is a fossil — it's just where Debian historically stored
+#               cursor-theme alternative files. The directory name has
+#               no runtime significance.
+#           (c) XWayland (the X11 compatibility layer) is still bundled
+#               in GNOME 50 — X11 apps running inside the Wayland session
+#               (older GTK3 apps, Wine, some Electron apps) still read
+#               /usr/share/icons/default/index.theme to find the cursor.
+#           (d) The Xcursor bitmap format is still what Mutter reads to
+#               draw the pointer, regardless of display protocol.
+#           (e) The GDM login screen uses its own cursor loading (separate
+#               from your dconf user settings) — `update-alternatives` is
+#               what configures the GDM cursor.
+#         Sources:
+#           - https://www.ghacks.net/2025/09/13/gnome-50-releases-with-x11-session-support-removed-and-wayland/
+#           - https://fedoraproject.org/wiki/Changes/WaylandOnlyGNOME
+#           - https://wiki.debian.org/DebianAlternatives
+#
+#     (3) `update-alternatives --set x-cursor-theme ...`
+#         Selects breeze as the active alternative. This makes breeze the
+#         system-wide default cursor for X11 apps that read
+#         /usr/share/icons/default/index.theme (e.g., display managers,
+#         non-GNOME X11 apps). Priority 50 (lower than Adwaita's 90, but
+#         we explicitly --set it so priority doesn't matter).
+#
+#     (4) `gsettings set org.gnome.desktop.interface cursor-theme 'breeze_cursors'`
+#         This is what ACTUALLY changes the cursor inside GNOME (both
+#         Wayland and X11 sessions). GNOME's mutter reads this key and
+#         loads cursors from /usr/share/icons/breeze_cursors/cursors/.
+#         The key is NOT deprecated in GNOME 50 (verified by extracting
+#         org.gnome.desktop.interface.gschema.xml from
+#         gsettings-desktop-schemas 50.0-1ubuntu2 — default 'Adwaita',
+#         no deprecation notice, unlike org.gnome.desktop.default-
+#         applications.terminal which IS deprecated).
+#         Run as $SUDO_USER so the setting lands in the user's dconf
+#         (~/.config/dconf/user), NOT root's.
+#
+#     ORDER DEPENDENCY:
+#       - apt install breeze-cursor-theme: no GNOME dep, can run anytime
+#       - update-alternatives: no GNOME dep, just needs dpkg
+#       - gsettings set: NEEDS GNOME (gsettings-desktop-schemas + dconf),
+#         so MUST run after section 1 (gnome-core install)
+#       All three are safe to run here in section 6b because GNOME was
+#       installed in section 1.
+#
+#     TROUBLESHOOTING:
+#       - If cursor doesn't change after reboot: log out and back in
+#         (mutter reads cursor-theme at session start, not live).
+#       - If only some apps show the new cursor: that's a Wayland/X11
+#         split — see "Issues worth noting" in the README.
+# ---------------------------------------------------------------------------
+echo "==> Installing breeze-cursor-theme (KDE cursor as default)"
+apt-get install -y breeze-cursor-theme
+
+# Register breeze as an x-cursor-theme alternative.
+# Master link /usr/share/icons/default/index.theme is the same one Adwaita
+# uses (verified from adwaita-icon-theme postinst). Slave path is the only
+# .theme file breeze-cursor-theme ships.
+update-alternatives --install /usr/share/icons/default/index.theme x-cursor-theme /usr/share/icons/breeze_cursors/index.theme 50 2>/dev/null || true
+update-alternatives --set x-cursor-theme /usr/share/icons/breeze_cursors/index.theme 2>/dev/null || true
+
+# Set the cursor theme in GNOME (per-user dconf setting).
+# This is the step that actually changes the cursor inside GNOME.
+# Guard: only run if there's a real SUDO_USER (someone ran `sudo bash debloat.sh`
+# from a logged-in session). If run from a root shell or cloud-init, this
+# skips silently — the user can run the gsettings command manually after
+# first login.
+if [ -n "${SUDO_USER:-}" ] && [ "${SUDO_USER}" != "root" ]; then
+  sudo -u "$SUDO_USER" gsettings set org.gnome.desktop.interface cursor-theme 'breeze_cursors' 2>/dev/null || true
+fi
 
 # ---------------------------------------------------------------------------
 # 7. Free the ~512 MB the kernel reserves for crash dumps (kdump).
@@ -264,6 +387,12 @@ apt-get remove -y --purge snapd 2>/dev/null || true
 #     one of several alternatives (`ubuntu-session | gnome-session | ...`)
 #     and we have `gnome-session` installed, so the alternative is
 #     satisfied without them.
+#
+#     `ptyxis` is pinned even though it's not a hard dep of anything we
+#     keep — it's a hard dep of `gnome-core` (which we removed in section
+#     8) and a Recommends of `ubuntu-desktop`/`vanilla-gnome-desktop`.
+#     Pinning it is defense-in-depth: if the user later does
+#     `apt install gnome-core` (to undo), ptyxis will NOT come back.
 # ---------------------------------------------------------------------------
 echo "==> Writing apt pins (Priority -1 = never install)"
 cat > /etc/apt/preferences.d/block-gnome-bloat <<'EOF'
@@ -274,7 +403,7 @@ cat > /etc/apt/preferences.d/block-gnome-bloat <<'EOF'
 #   ubuntu-wallpapers           (hard dep of gnome-shell)
 #   tecla                       (hard dep of gnome-shell & gnome-control-center)
 #   vim, vim-common, vim-runtime  (hard dep of ubuntu-server)
-Package: gnome-calculator gnome-calendar gnome-characters gnome-clocks gnome-contacts gnome-disk-utility gnome-font-viewer gnome-logs gnome-maps gnome-weather gnome-sushi gnome-system-monitor gnome-text-editor baobab loupe papers showtime simple-scan gnome-connections gnome-user-docs yelp orca gnome-software snapd ubuntu-session gnome-shell-ubuntu-extensions yaru-theme-gnome-shell yaru-theme-gtk yaru-theme-icon yaru-theme-sound gsettings-ubuntu-schemas alacritty xterm gnome-terminal vim-tiny
+Package: gnome-calculator gnome-calendar gnome-characters gnome-clocks gnome-contacts gnome-disk-utility gnome-font-viewer gnome-logs gnome-maps gnome-weather gnome-sushi gnome-system-monitor gnome-text-editor baobab loupe papers showtime simple-scan gnome-connections gnome-user-docs yelp orca gnome-software snapd ubuntu-session gnome-shell-ubuntu-extensions yaru-theme-gnome-shell yaru-theme-gtk yaru-theme-icon yaru-theme-sound gsettings-ubuntu-schemas alacritty xterm gnome-terminal ptyxis vim-tiny
 Pin: release *
 Pin-Priority: -1
 EOF
@@ -371,4 +500,37 @@ echo "==> Development toolchain installed"
 #    /etc/apt/apt.conf.d/01autoremove (kernel metapackages still need to be
 #    manual to ensure future kernel upgrades install):
 #    https://askubuntu.com/questions/563483/why-doesnt-apt-get-autoremove-remove-my-old-kernels
+#
+# 7. breeze-cursor-theme package (Ubuntu 26.04 resolute, universe):
+#    https://packages.ubuntu.com/resolute/breeze-cursor-theme
+#    Version 4:6.6.5-0ubuntu0.1 — Depends: (none), ~30 MB installed.
+#    Filelist (verified — NO /etc/X11/cursors/ files in resolute):
+#    https://packages.ubuntu.com/resolute/all/breeze-cursor-theme/filelist
+#    Only ships: /usr/share/icons/breeze_cursors/index.theme
+#                /usr/share/icons/Breeze_Light/index.theme
+#    The OLD /etc/X11/cursors/breeze_cursors.theme was removed in
+#    breeze 4:6.2.4-1 (per postinst dpkg-maintscript-helper rm_conffile).
+#
+# 8. adwaita-icon-theme postinst registers x-cursor-theme alternative:
+#      update-alternatives --install /usr/share/icons/default/index.theme \
+#        x-cursor-theme /usr/share/icons/Adwaita/cursor.theme 90
+#    Master link: /usr/share/icons/default/index.theme
+#    breeze-cursor-theme's postinst does NOT register an alternative
+#    (only runs update-icon-caches), so we register it manually in 6b.
+#
+# 9. GNOME cursor-theme gsettings key (NOT deprecated in GNOME 50):
+#    Schema: org.gnome.desktop.interface
+#    Key: cursor-theme (type s, default 'Adwaita')
+#    File: /usr/share/glib-2.0/schemas/org.gnome.desktop.interface.gschema.xml
+#    Package: gsettings-desktop-schemas 50.0-1ubuntu2
+#    Mutter reads this key to load cursors from
+#    /usr/share/icons/<theme>/cursors/ on both Wayland and X11 sessions.
+#
+# 10. Ptyxis dependency analysis (why it's safe to pin):
+#     Hard dep of: edubuntu-desktop, edubuntu-desktop-minimal, gnome-core,
+#                  gnome-flashback-meta
+#     Recommends of: ubuntu-desktop, ubuntu-desktop-minimal,
+#                     vanilla-gnome-desktop
+#     We removed gnome-core (section 8), so nothing pulls ptyxis now.
+#     Pinning is defense-in-depth against future `apt install gnome-core`.
 # ============================================================================
