@@ -64,13 +64,35 @@ sudo git clone https://github.com/ninxdev/ubuntu-debloat.git
 
 # 3. Run it
 cd ubuntu-debloat
-sudo bash debloat.sh
+chmod +x debloat.sh
+sudo ./debloat.sh
 
 # 4. Reboot
 sudo reboot
 ```
 
 After reboot you'll see the GDM login screen. Log in — only the vanilla **"GNOME"** session is available (the "Ubuntu" session no longer exists).
+
+### Why `git clone` + `chmod +x` + `sudo ./debloat.sh` (not `curl | bash`)?
+
+There are three common ways to run a remote bash script. Here's why this repo recommends the `git clone` method:
+
+| Method | Can inspect before running? | Respects shebang? | Self-elevation works? | Easy updates? |
+|---|---|---|---|---|
+| `git clone` + `chmod +x` + `sudo ./debloat.sh` ✅ | Yes (full source on disk) | Yes | Yes | Yes (`git pull`) |
+| `curl -o debloat.sh` + `chmod +x` + `sudo ./debloat.sh` | Yes (after download) | Yes | Yes | No (re-download) |
+| `curl … \| sudo bash` ❌ | **No** (piped straight to bash) | No | No (`$0` is `bash`) | No |
+
+**Why `curl | bash` is a security anti-pattern:**
+- You can't read the script before running it — you're executing arbitrary code as root without inspection.
+- The server can detect a pipe vs a save and serve different content (the "curl pipe bash hack" — well-documented at [lobste.rs](https://lobste.rs/s/ymcbwl/what_s_problem_with_pipe_curl_into_sh) and [Hacker News](https://news.ycombinator.com/item?id=21490151)).
+- The script's self-elevation guard (`exec sudo "$0" "$@"`) doesn't work because `$0` is `bash`, not a file path — so you must use `sudo bash` upfront, which means sudo prompts before you can even see what the script does.
+- If the URL is compromised or MITM'd, you run attacker code as root with zero review.
+
+**Why `chmod +x` + `./debloat.sh` (not `sudo bash debloat.sh`)?**
+- The script declares `#!/usr/bin/env bash` as its shebang — running it directly respects that declaration. `sudo bash debloat.sh` bypasses the shebang and forces `/usr/bin/bash` specifically.
+- It's the standard Unix convention — every other executable script on the system runs this way.
+- The script has a self-elevation guard (`exec sudo "$0" "$@"` if not root), so even `./debloat.sh` without sudo works — it just prompts for the sudo password mid-execution rather than upfront.
 
 ---
 
@@ -177,8 +199,7 @@ The script marks these three as manually installed so `autoremove` will never to
  4. apt-mark manual EVERYTHING that must survive autoremove
  5. Enable gdm3 + set graphical.target      ← done EARLY, while gdm3 exists
  6. Install extras (htop, wget, Chrome, fonts-noto, gnome-boxes, micro,
-    gnome-shell-extension-manager)
- 6b. Install breeze-cursor-theme + set as default cursor (system-wide + GNOME)
+    gnome-shell-extension-manager, breeze-cursor-theme)
  7. Remove kdump-tools (free 512 MB)
  8. Remove gnome-core metapackage
  9. Remove optional GNOME apps              ← app removal
@@ -237,18 +258,14 @@ This script was verified by:
 
 ## Issues worth noting
 
-### Cursor theme on Wayland vs X11
+### Cursor theme on Wayland-only GNOME 50
 
-GNOME 50 on Ubuntu 26.04 is **Wayland-only** — the X11 session backend was removed from Mutter/GDM/gnome-shell entirely (verified by multiple sources: gHacks, The Register, Fedora Project Wiki). There is no "GNOME on Xorg" session at login.
+GNOME 50 is Wayland-only, but the script uses both `update-alternatives --set x-cursor-theme` AND `gsettings set org.gnome.desktop.interface cursor-theme` — they serve different purposes:
 
-Despite this, the script uses BOTH `update-alternatives --set x-cursor-theme ...` AND `gsettings set org.gnome.desktop.interface cursor-theme ...`. This is intentional and correct, because each serves a different purpose:
+- **`gsettings set`** is what mutter reads at session start to set the cursor for GNOME/GTK4 apps.
+- **`update-alternatives --set`** is a filesystem symlink tool (not display-protocol-aware) that sets the cursor for XWayland apps and the GDM login screen, which read `/usr/share/icons/default/index.theme` directly.
 
-- **`gsettings set`** is what actually changes the cursor inside the GNOME Wayland session. Mutter reads `org.gnome.desktop.interface cursor-theme` at session start and loads cursors from `/usr/share/icons/<theme>/cursors/`. This affects all GNOME/GTK4 apps.
-- **`update-alternatives --set`** is a filesystem symlink tool that repoints `/usr/share/icons/default/index.theme` to the breeze theme's `index.theme`. It does NOT require an X server to run and does NOT care about display protocols. The `/etc/X11/` in Debian's directory naming is a fossil — it's just where Debian historically stored cursor-theme alternative files. This affects:
-  - **X11 apps running via XWayland** (older GTK3 apps, Wine, some Electron apps) — they still read `/usr/share/icons/default/index.theme` to find the cursor
-  - **The GDM login screen** — it uses its own cursor loading (separate from your dconf user settings), and `update-alternatives` is what configures the GDM cursor
-
-**Note for users coming from older Ubuntu (24.04 noble):** the OLD path `/etc/X11/cursors/breeze_cursors.theme` does NOT exist in Ubuntu 26.04 resolute's `breeze-cursor-theme` package — it was removed in version 4:6.2.4-1. Older blog posts and Ask Ubuntu answers reference this path; they are outdated. The script uses the correct resolute path `/usr/share/icons/breeze_cursors/index.theme`.
+**Note:** the OLD path `/etc/X11/cursors/breeze_cursors.theme` does NOT exist in Ubuntu 26.04 — it was removed in breeze 4:6.2.4-1. The script uses the correct resolute path `/usr/share/icons/breeze_cursors/index.theme`. Older blog posts referencing the old path are outdated.
 
 ### `org.gnome.desktop.default-applications.terminal` is "deprecated" but still works
 
