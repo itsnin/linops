@@ -73,26 +73,6 @@ sudo reboot
 
 After reboot you'll see the GDM login screen. Log in — only the vanilla **"GNOME"** session is available (the "Ubuntu" session no longer exists).
 
-### Why `git clone` + `chmod +x` + `sudo ./debloat.sh` (not `curl | bash`)?
-
-There are three common ways to run a remote bash script. Here's why this repo recommends the `git clone` method:
-
-| Method | Can inspect before running? | Respects shebang? | Self-elevation works? | Easy updates? |
-|---|---|---|---|---|
-| `git clone` + `chmod +x` + `sudo ./debloat.sh` ✅ | Yes (full source on disk) | Yes | Yes | Yes (`git pull`) |
-| `curl -o debloat.sh` + `chmod +x` + `sudo ./debloat.sh` | Yes (after download) | Yes | Yes | No (re-download) |
-| `curl … \| sudo bash` ❌ | **No** (piped straight to bash) | No | No (`$0` is `bash`) | No |
-
-**Why `curl | bash` is a security anti-pattern:**
-- You can't read the script before running it — you're executing arbitrary code as root without inspection.
-- The server can detect a pipe vs a save and serve different content (the "curl pipe bash hack" — well-documented at [lobste.rs](https://lobste.rs/s/ymcbwl/what_s_problem_with_pipe_curl_into_sh) and [Hacker News](https://news.ycombinator.com/item?id=21490151)).
-- The script's self-elevation guard (`exec sudo "$0" "$@"`) doesn't work because `$0` is `bash`, not a file path — so you must use `sudo bash` upfront, which means sudo prompts before you can even see what the script does.
-- If the URL is compromised or MITM'd, you run attacker code as root with zero review.
-
-**Why `chmod +x` + `./debloat.sh` (not `sudo bash debloat.sh`)?**
-- The script declares `#!/usr/bin/env bash` as its shebang — running it directly respects that declaration. `sudo bash debloat.sh` bypasses the shebang and forces `/usr/bin/bash` specifically.
-- It's the standard Unix convention — every other executable script on the system runs this way.
-- The script has a self-elevation guard (`exec sudo "$0" "$@"` if not root), so even `./debloat.sh` without sudo works — it just prompts for the sudo password mid-execution rather than upfront.
 
 ---
 
