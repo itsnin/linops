@@ -59,20 +59,16 @@ This script removes all of that and gives you **pure upstream GNOME 50** — the
 ```bash
 # 1. Boot your fresh Ubuntu 26.04 Server install
 
-# 2. Get the script
-sudo git clone https://github.com/ninxdev/ubuntu-debloat.git
+# 2. Run the script directly (source is on GitHub for inspection)
+curl -fsSL https://raw.githubusercontent.com/ninxdev/ubuntu-debloat/main/debloat.sh | sudo bash
 
-# 3. Run it
-cd ubuntu-debloat
-chmod +x debloat.sh
-sudo ./debloat.sh
-
-# 4. Reboot
+# 3. Reboot
 sudo reboot
 ```
 
 After reboot you'll see the GDM login screen. Log in — only the vanilla **"GNOME"** session is available (the "Ubuntu" session no longer exists).
 
+The full source is on GitHub at <https://github.com/ninxdev/ubuntu-debloat> — inspect, fork, or modify before running if you prefer.
 
 ---
 
@@ -273,9 +269,9 @@ sudo apt autoremove --purge
 
 This will also free `vim` (which `ubuntu-server` hard-depends on) — the script does NOT remove `vim` itself because of this hard dependency.
 
-### Running the script from a root shell (not `sudo bash`)
+### Running the script from a root shell (not via `curl | sudo bash`)
 
-The two `gsettings set` calls (for terminal and cursor theme) only run if `$SUDO_USER` is set — i.e., someone ran `sudo bash debloat.sh` from a logged-in user session. If you run the script from a root shell or via cloud-init, these gsettings calls skip silently. After your first GNOME login, run manually:
+The two `gsettings set` calls (for terminal and cursor theme) only run if `$SUDO_USER` is set — i.e., someone ran the script via `curl … | sudo bash` from a logged-in user session. If you run the script from a root shell or via cloud-init, these gsettings calls skip silently. After your first GNOME login, run manually:
 
 ```bash
 gsettings set org.gnome.desktop.default-applications.terminal exec 'ghostty'
@@ -348,7 +344,7 @@ The cursor theme is read by mutter at session start. If you changed it via the s
    ```bash
    gsettings get org.gnome.desktop.interface cursor-theme
    ```
-   Should print `'breeze_cursors'`. If it prints `'Adwaita'`, the script's gsettings call was skipped (you probably ran the script from a root shell, not `sudo bash debloat.sh`).
+   Should print `'breeze_cursors'`. If it prints `'Adwaita'`, the script's gsettings call was skipped (you probably ran the script from a root shell instead of via `curl … | sudo bash` from a logged-in user session).
 5. Verify the system-wide alternative:
    ```bash
    sudo update-alternatives --display x-cursor-theme
