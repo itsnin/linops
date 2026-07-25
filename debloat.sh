@@ -3,7 +3,7 @@
 # debloat.sh — Pure vanilla GNOME 50 on Ubuntu 26.04 LTS (Server install)
 # --------------------------------------------------------------------------
 # Minimal: no Ubuntu session / Yaru theme / Ubuntu extensions / Snap.
-# Run as:  sudo ./debloat.sh   (or: ./debloat.sh — it self-elevates)
+# Run as:  curl -fsSL https://raw.githubusercontent.com/ninxdev/ubuntu-debloat/main/debloat.sh | sudo bash
 #
 # TARGET:  Ubuntu 26.04 LTS "Resolute Raccoon" Server (amd64) install.
 # RESULT:  Vanilla GNOME 50 desktop, ghostty terminal, NetworkManager,
@@ -28,28 +28,6 @@
 #  12. apt autoremove --purge
 #  13. Sanity check: gdm3.service exists?
 #  14. Install development toolchain (separate, last)
-#
-# ============================================================================
-# WHY GDM IS ENABLED EARLY (section 5, before pinning)
-# ----------------------------------------------------------------------------
-# If pinning or autoremove fails and purges gdm3, we want gdm3.service to
-# already be registered so the system can still boot to a graphical target.
-# Doing it the other way around produces:
-#     "Failed to enable unit: Unit gdm3.service does not exist"
-#
-# ============================================================================
-# THE ubuntu-wallpapers-resolute TRAP — Ubuntu Bug 1894347 (open since 2020)
-# ----------------------------------------------------------------------------
-# Do NOT pin or remove these — they look like bloat but are hard deps:
-#
-#   gdm3  Depends  gnome-shell (>= 50~alpha)
-#   gnome-shell  Depends  ubuntu-wallpapers                 ← Ubuntu patch
-#   ubuntu-wallpapers  Depends  ubuntu-wallpapers-resolute  ← hard dep
-#   gnome-shell  Depends  tecla                             ← hard dep
-#
-# Pinning/removing any of these cascades through gnome-shell → gdm3 →
-# gnome-session and breaks the desktop.
-# Ref: https://lists.ubuntu.com/archives/foundations-bugs/2020-September/431929.html
 #
 # ============================================================================
 set -euo pipefail
@@ -173,10 +151,19 @@ fi
 #          gir1.2-gdm-1.0         (gnome-shell + gdm3 hard-dep, = 50.0-0ubuntu1)
 #        Ref: http://archive.ubuntu.com/ubuntu/dists/resolute/main/binary-amd64/Packages.gz
 #
-#    (c) Hard deps of gnome-shell that we cannot remove or pin:
+#    (c) Hard deps of gnome-shell that we cannot remove or pin
+#        (THE ubuntu-wallpapers-resolute TRAP — Ubuntu Bug 1894347):
 #          tecla                      (gnome-shell hard-dep)
 #          ubuntu-wallpapers          (gnome-shell hard-dep)
 #          ubuntu-wallpapers-resolute (ubuntu-wallpapers hard-dep)
+#        These look like bloat but are hard deps:
+#          gdm3  Depends  gnome-shell (>= 50~alpha)
+#          gnome-shell  Depends  ubuntu-wallpapers                 ← Ubuntu patch
+#          ubuntu-wallpapers  Depends  ubuntu-wallpapers-resolute  ← hard dep
+#          gnome-shell  Depends  tecla                             ← hard dep
+#        Pinning/removing any of these cascades through gnome-shell →
+#        gdm3 → gnome-session and breaks the desktop.
+#        Ref: https://lists.ubuntu.com/archives/foundations-bugs/2020-September/431929.html
 #
 #    (d) xdg-user-dirs-gtk — creates Desktop/Documents/Downloads/Music/
 #        Pictures/Videos on first GNOME login.
@@ -201,8 +188,11 @@ apt-mark manual \
 
 # ---------------------------------------------------------------------------
 # 5. Make GDM the display manager and boot into the graphical target.
-#    DONE EARLY — while gdm3 is freshly installed and we KNOW it exists.
-#    If we did this after pinning/autoremove, gdm3 might already be gone.
+#    DONE EARLY — before any pinning or autoremove. If pinning or autoremove
+#    fails and purges gdm3, we want gdm3.service to already be registered
+#    so the system can still boot to a graphical target. Doing it the other
+#    way around produces:
+#        "Failed to enable unit: Unit gdm3.service does not exist"
 # ---------------------------------------------------------------------------
 echo "==> Enabling GDM and graphical target"
 systemctl enable gdm3                          # enable the GDM systemd unit
