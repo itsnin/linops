@@ -59,7 +59,7 @@ This script removes all of that and gives you **pure upstream GNOME 50** — the
 ```bash
 # 1. Boot your fresh Ubuntu 26.04 Server install
 
-# 2. Run the script directly (source is on GitHub for inspection)
+# 2. Run the script directly
 curl -fsSL https://raw.githubusercontent.com/ninxdev/ubuntu-debloat/main/debloat.sh | sudo bash
 
 # 3. Reboot
@@ -68,7 +68,6 @@ sudo reboot
 
 After reboot you'll see the GDM login screen. Log in — only the vanilla **"GNOME"** session is available (the "Ubuntu" session no longer exists).
 
-The full source is on GitHub at <https://github.com/ninxdev/ubuntu-debloat> — inspect, fork, or modify before running if you prefer.
 
 ---
 
