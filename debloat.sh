@@ -2,7 +2,7 @@
 #
 # debloat.sh  —  Pure vanilla GNOME 50 on Ubuntu 26.04 LTS (Server install)
 # --------------------------------------------------------------------------
-# Minimal, no Ubuntu session / Yaru theme / Ubuntu extensions / Snap.
+# Minimal: no Ubuntu session / Yaru theme / Ubuntu extensions / Snap.
 # Run as:  sudo bash debloat.sh
 #
 # TARGET:  Ubuntu 26.04 LTS "Resolute Raccoon" Server (amd64) install.
@@ -11,46 +11,41 @@
 #          vanilla 'GNOME' session (no 'Ubuntu' session exists).
 #
 # ============================================================================
-# WHY THIS ORDER (GDM enable BEFORE pinning, app removal LAST)
+# ORDERING RATIONALE
 # ----------------------------------------------------------------------------
-# The previous version of this script enabled GDM at the very end, AFTER the
-# apt pin and autoremove. If anything went wrong during pinning or autoremove
-# (and it did — see the ubuntu-wallpapers-resolute bug below), gdm3.service
-# would be gone by the time `systemctl enable gdm3` ran, producing:
+# GDM is enabled EARLY (section 5, before pinning) so gdm3.service is
+# already registered by the time the destructive operations (pin + remove +
+# autoremove) run. If we did it the other way around, a pin-induced dep
+# failure could purge gdm3 before `systemctl enable gdm3` runs, producing:
 #     "Failed to enable unit: Unit gdm3.service does not exist"
 #
-# This version does, in order:
-#   0. apt-get update + apt-get upgrade  (bring system to current)
-#   1. Install GNOME core + network + terminal
-#   2. apt-mark manual EVERYTHING that must survive (so autoremove is safe)
-#   3. Enable GDM + graphical.target  ← done EARLY, while gdm3 is fresh
-#   4. Install user extras (htop, wget, fonts-noto, gnome-boxes, micro, gnome-shell-extension-manager, Chrome)
-#   5. Set breeze-cursor-theme as default cursor (system-wide + GNOME)
-#   6. Remove kdump-tools (free 512 MB)
-#   7. ONLY THEN remove optional GNOME apps and write apt pins
-#   8. autoremove --purge as the very last step
+# Script flow:
+#   0. apt-get update + apt-get upgrade
+#   1. Install gnome-core + NetworkManager + ghostty
+#   2. apt-mark manual EVERYTHING that must survive autoremove
+#   3. Enable gdm3 + graphical.target                  ← EARLY
+#   4. Install extras (htop, wget, fonts-noto, gnome-boxes, micro,
+#      gnome-shell-extension-manager, Chrome, breeze-cursor-theme)
+#   5. Remove kdump-tools (free 512 MB)
+#   6. Remove optional GNOME apps + write apt pins     ← LAST (destructive)
+#   7. autoremove --purge
+#   8. Sanity-check gdm3.service exists
 #   9. Install development toolchain (separate, optional, last)
 #
 # ============================================================================
-# THE BUG THAT BROKE THE PREVIOUS SCRIPT (verified, see evidence at bottom)
+# THE ubuntu-wallpapers-resolute TRAP (Ubuntu Bug 1894347, open since 2020)
 # ----------------------------------------------------------------------------
-# The previous script pinned `ubuntu-wallpapers-resolute` at Pin-Priority: -1
-# and tried to `apt remove --purge ubuntu-wallpapers-resolute`. But:
+# Do NOT pin or remove `ubuntu-wallpapers-resolute`, `ubuntu-wallpapers`,
+# or `tecla`. They look like bloat but are hard deps:
 #
 #   gdm3  Depends  gnome-shell (>= 50~alpha)
 #   gnome-shell  Depends  ubuntu-wallpapers                 <-- Ubuntu patch
 #   ubuntu-wallpapers  Depends  ubuntu-wallpapers-resolute  <-- hard dep
+#   gnome-shell  Depends  tecla                             <-- hard dep
 #
-# Pinning or removing `ubuntu-wallpapers-resolute` cascades through
-# ubuntu-wallpapers -> gnome-shell -> gdm3 -> gnome-session, breaking GNOME.
-# This is Ubuntu Bug 1894347 (open since 2020, still present in 26.04):
-#   https://lists.ubuntu.com/archives/foundations-bugs/2020-September/431929.html
-#   "Can't uninstall ubuntu-wallpapers and ubuntu-wallpapers-bionic
-#    without gnome-shell"
-#
-# FIX: Do NOT pin or remove `ubuntu-wallpapers-resolute` (or `ubuntu-wallpapers`
-# or `tecla`). Keep them. They are tiny relative to a working desktop.
-# (ubuntu-wallpapers-resolute is ~63 MB of wallpaper data — acceptable cost.)
+# Pinning/removing any of these cascades through gnome-shell -> gdm3 ->
+# gnome-session and breaks the desktop.
+# Ref: https://lists.ubuntu.com/archives/foundations-bugs/2020-September/431929.html
 #
 # ============================================================================
 set -euo pipefail
@@ -118,12 +113,9 @@ update-alternatives --install /usr/bin/x-terminal-emulator x-terminal-emulator /
 update-alternatives --set x-terminal-emulator /usr/bin/ghostty
 
 # Tell GNOME's Ctrl+Alt+T keybinding to launch ghostty.
-# Note: `org.gnome.desktop.default-applications.terminal` is marked
-# "DEPRECATED" in gsettings-desktop-schemas 50.0, but GNOME 50 on
-# Ubuntu 26.04 still reads it for the Ctrl+Alt+T keybinding. Verified
-# empirically: without this, Ctrl+Alt+T does nothing; with it,
-# Ctrl+Alt+T opens ghostty.
-# Run as the calling user (not root) so the setting lands in their dconf.
+# This gsettings key is marked "deprecated" in GNOME 50 but still read for
+# Ctrl+Alt+T (verified empirically). Run as $SUDO_USER, not root, so the
+# setting lands in the user's dconf.
 if [ -n "${SUDO_USER:-}" ] && [ "${SUDO_USER}" != "root" ]; then
   sudo -u "$SUDO_USER" gsettings set org.gnome.desktop.default-applications.terminal exec 'ghostty' 2>/dev/null || true
   sudo -u "$SUDO_USER" gsettings set org.gnome.desktop.default-applications.terminal exec-arg '-e' 2>/dev/null || true
@@ -134,25 +126,18 @@ fi
 #
 #    This list is the union of:
 #      (a) GNOME core we explicitly want (gnome-shell, gdm3, etc.)
-#      (b) hard deps of gdm3 / gnome-shell / gnome-control-center that the
-#          PREVIOUS script forgot — these got purged by autoremove and
-#          broke gdm3 (see screenshot):
-#              gnome-session-common  (gdm3 hard-dep)
-#              gnome-session-bin     (gdm3 hard-dep)
-#              gnome-shell-common    (gnome-shell hard-dep)
-#              mutter-common         (gnome-control-center hard-dep)
-#              libgdm1               (gdm3 hard-dep)
-#              gir1.2-gdm-1.0        (gnome-shell + gdm3 hard-dep)
-#      (c) hard deps of gnome-shell that we cannot remove but the previous
-#          script correctly did NOT pin (kept for clarity):
-#              tecla                 (gnome-shell hard-dep)
-#              ubuntu-wallpapers     (gnome-shell hard-dep)
-#              ubuntu-wallpapers-resolute (ubuntu-wallpapers hard-dep)
+#      (b) hard deps of gdm3 / gnome-shell / gnome-control-center that
+#          autoremove would otherwise purge (breaking the desktop):
+#              gnome-session-common, gnome-session-bin  (gdm3 hard-dep)
+#              gnome-shell-common                       (gnome-shell hard-dep)
+#              mutter-common                            (gnome-control-center hard-dep)
+#              libgdm1, gir1.2-gdm-1.0                  (gdm3 + gnome-shell hard-dep)
+#      (c) hard deps of gnome-shell that we cannot remove or pin:
+#              tecla, ubuntu-wallpapers, ubuntu-wallpapers-resolute
 #      (d) xdg-user-dirs-gtk — creates Desktop/Documents/Downloads/Music/
-#          Pictures/Videos on first GNOME login. KEPT per user request.
-#      (e) ubuntu-server metapackage + kernel metapackages — protect the
-#          running kernel from autoremove (previous script's autoremove
-#          purged linux-image-unsigned-7.0.0-14-generic, see screenshot).
+#          Pictures/Videos on first GNOME login.
+#      (e) ubuntu-server + kernel metapackages — protect the running kernel
+#          from autoremove.
 # ---------------------------------------------------------------------------
 echo "==> Marking critical packages as manually installed (protects autoremove)"
 apt-mark manual \
@@ -177,134 +162,29 @@ systemctl set-default graphical.target
 echo "/usr/sbin/gdm3" > /etc/X11/default-display-manager
 
 # ---------------------------------------------------------------------------
-# 6. Extras: htop + Google Chrome (comment out the Chrome block if unwanted).
+# 6. Extras: htop, wget, fonts-noto, gnome-boxes, micro,
+#    gnome-shell-extension-manager, breeze-cursor-theme, Google Chrome.
 # ---------------------------------------------------------------------------
-echo "==> Installing htop, wget, fonts-noto, gnome-boxes, micro, gnome-shell-extension-manager"
-apt-get install -y htop wget fonts-noto gnome-boxes micro gnome-shell-extension-manager
+echo "==> Installing extras (htop, wget, fonts-noto, gnome-boxes, micro, gnome-shell-extension-manager, breeze-cursor-theme)"
+apt-get install -y htop wget fonts-noto gnome-boxes micro gnome-shell-extension-manager breeze-cursor-theme
 
 echo "==> Installing Google Chrome (direct .deb)"
-# Download Chrome's official .deb directly from Google.
-# Using `apt-get install ./file.deb` (instead of `dpkg -i`) lets apt resolve
-# Chrome's dependencies (e.g., libu2f-udev, fonts-liberation) automatically.
-# The .deb's postinst adds Google's signing key + repo to
-# /etc/apt/sources.list.d/google-chrome.list, so future `apt upgrade`
-# pulls Chrome updates natively.
-# Source: https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+# apt-get install (not dpkg -i) lets apt resolve Chrome's deps automatically.
+# The .deb's postinst adds Google's signing key + apt repo, so future
+# `apt upgrade` pulls Chrome updates natively.
 wget -q -O /tmp/google-chrome-stable.deb https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
 apt-get install -y /tmp/google-chrome-stable.deb || echo "Chrome install failed (continuing)"
 rm -f /tmp/google-chrome-stable.deb
 
-# ---------------------------------------------------------------------------
-# 6b. Breeze cursor theme (KDE's default cursor) — set as system-wide default.
-#
-#     Why: GNOME's default Adwaita cursor is white/small; Breeze is larger,
-#     has better visibility, and matches what KDE/Plasma users expect.
-#
-#     IMPLEMENTATION NOTES (verified, see evidence at bottom):
-#
-#     (1) `apt install breeze-cursor-theme`
-#         Installs cursor files to /usr/share/icons/breeze_cursors/cursors/
-#         and /usr/share/icons/Breeze_Light/cursors/.
-#         Package: breeze-cursor-theme 4:6.6.5-0ubuntu0.1 (resolute-updates/
-#         universe). Depends: (none). ~30 MB installed.
-#         Source: https://packages.ubuntu.com/resolute/breeze-cursor-theme
-#
-#     (2) `update-alternatives --install ... x-cursor-theme ...`
-#         Registers breeze as an option in the x-cursor-theme alternatives
-#         system. The MASTER link is /usr/share/icons/default/index.theme
-#         (verified by reading adwaita-icon-theme's postinst, which uses the
-#         same master link). breeze-cursor-theme's own postinst does NOT
-#         register an alternative (it only runs update-icon-caches), so we
-#         must register it manually.
-#         We use /usr/share/icons/breeze_cursors/index.theme as the slave
-#         path (the only .theme file breeze-cursor-theme ships in 26.04).
-#
-#         *** IMPORTANT: the OLD path /etc/X11/cursors/breeze_cursors.theme
-#             does NOT exist in Ubuntu 26.04's breeze-cursor-theme package.
-#             It was removed in version 4:6.2.4-1 (verified by reading the
-#             postinst's dpkg-maintscript-helper rm_conffile call, and by
-#             fetching the filelist from packages.ubuntu.com/resolute).
-#             Older blog posts / Ask Ubuntu answers reference this path —
-#             they are OUTDATED (the file still exists in noble 24.04 but
-#             was dropped for resolute 26.04). ***
-#
-#         *** WHY USE `update-alternatives` ON WAYLAND-ONLY GNOME 50? ***
-#         GNOME 50 removed the X11 session backend from Mutter/GDM/gnome-shell
-#         (verified by multiple sources: XDA, gHacks, The Register, Fedora
-#         Project Wiki). There is no "GNOME on Xorg" session at login.
-#         HOWEVER, `update-alternatives --set x-cursor-theme` is still
-#         useful and correct on Wayland-only GNOME 50, because:
-#           (a) `update-alternatives` is a filesystem symlink tool — it
-#               repoints /usr/share/icons/default/index.theme to whatever
-#               path you specify. It does NOT require an X server to run
-#               and does NOT care about display protocols.
-#           (b) The "/etc/X11/" in Debian's directory naming convention
-#               is a fossil — it's just where Debian historically stored
-#               cursor-theme alternative files. The directory name has
-#               no runtime significance.
-#           (c) XWayland (the X11 compatibility layer) is still bundled
-#               in GNOME 50 — X11 apps running inside the Wayland session
-#               (older GTK3 apps, Wine, some Electron apps) still read
-#               /usr/share/icons/default/index.theme to find the cursor.
-#           (d) The Xcursor bitmap format is still what Mutter reads to
-#               draw the pointer, regardless of display protocol.
-#           (e) The GDM login screen uses its own cursor loading (separate
-#               from your dconf user settings) — `update-alternatives` is
-#               what configures the GDM cursor.
-#         Sources:
-#           - https://www.ghacks.net/2025/09/13/gnome-50-releases-with-x11-session-support-removed-and-wayland/
-#           - https://fedoraproject.org/wiki/Changes/WaylandOnlyGNOME
-#           - https://wiki.debian.org/DebianAlternatives
-#
-#     (3) `update-alternatives --set x-cursor-theme ...`
-#         Selects breeze as the active alternative. This makes breeze the
-#         system-wide default cursor for X11 apps that read
-#         /usr/share/icons/default/index.theme (e.g., display managers,
-#         non-GNOME X11 apps). Priority 50 (lower than Adwaita's 90, but
-#         we explicitly --set it so priority doesn't matter).
-#
-#     (4) `gsettings set org.gnome.desktop.interface cursor-theme 'breeze_cursors'`
-#         This is what ACTUALLY changes the cursor inside GNOME (both
-#         Wayland and X11 sessions). GNOME's mutter reads this key and
-#         loads cursors from /usr/share/icons/breeze_cursors/cursors/.
-#         The key is NOT deprecated in GNOME 50 (verified by extracting
-#         org.gnome.desktop.interface.gschema.xml from
-#         gsettings-desktop-schemas 50.0-1ubuntu2 — default 'Adwaita',
-#         no deprecation notice, unlike org.gnome.desktop.default-
-#         applications.terminal which IS deprecated).
-#         Run as $SUDO_USER so the setting lands in the user's dconf
-#         (~/.config/dconf/user), NOT root's.
-#
-#     ORDER DEPENDENCY:
-#       - apt install breeze-cursor-theme: no GNOME dep, can run anytime
-#       - update-alternatives: no GNOME dep, just needs dpkg
-#       - gsettings set: NEEDS GNOME (gsettings-desktop-schemas + dconf),
-#         so MUST run after section 1 (gnome-core install)
-#       All three are safe to run here in section 6b because GNOME was
-#       installed in section 1.
-#
-#     TROUBLESHOOTING:
-#       - If cursor doesn't change after reboot: log out and back in
-#         (mutter reads cursor-theme at session start, not live).
-#       - If only some apps show the new cursor: that's a Wayland/X11
-#         split — see "Issues worth noting" in the README.
-# ---------------------------------------------------------------------------
-echo "==> Installing breeze-cursor-theme (KDE cursor as default)"
-apt-get install -y breeze-cursor-theme
-
-# Register breeze as an x-cursor-theme alternative.
-# Master link /usr/share/icons/default/index.theme is the same one Adwaita
-# uses (verified from adwaita-icon-theme postinst). Slave path is the only
-# .theme file breeze-cursor-theme ships.
+echo "==> Setting breeze-cursor-theme as default cursor"
+# breeze-cursor-theme's postinst does NOT register an x-cursor-theme
+# alternative, so we do it manually. Master link is the same one Adwaita
+# uses (/usr/share/icons/default/index.theme). Path is /usr/share/icons/
+# breeze_cursors/index.theme — the OLD /etc/X11/cursors/breeze_cursors.theme
+# was removed in breeze 4:6.2.4-1.
 update-alternatives --install /usr/share/icons/default/index.theme x-cursor-theme /usr/share/icons/breeze_cursors/index.theme 50 2>/dev/null || true
 update-alternatives --set x-cursor-theme /usr/share/icons/breeze_cursors/index.theme 2>/dev/null || true
-
-# Set the cursor theme in GNOME (per-user dconf setting).
-# This is the step that actually changes the cursor inside GNOME.
-# Guard: only run if there's a real SUDO_USER (someone ran `sudo bash debloat.sh`
-# from a logged-in session). If run from a root shell or cloud-init, this
-# skips silently — the user can run the gsettings command manually after
-# first login.
+# gsettings is what mutter actually reads (per-user dconf, run as $SUDO_USER).
 if [ -n "${SUDO_USER:-}" ] && [ "${SUDO_USER}" != "root" ]; then
   sudo -u "$SUDO_USER" gsettings set org.gnome.desktop.interface cursor-theme 'breeze_cursors' 2>/dev/null || true
 fi
@@ -516,7 +396,7 @@ echo "==> Development toolchain installed"
 #        x-cursor-theme /usr/share/icons/Adwaita/cursor.theme 90
 #    Master link: /usr/share/icons/default/index.theme
 #    breeze-cursor-theme's postinst does NOT register an alternative
-#    (only runs update-icon-caches), so we register it manually in 6b.
+#    (only runs update-icon-caches), so we register it manually in section 6.
 #
 # 9. GNOME cursor-theme gsettings key (NOT deprecated in GNOME 50):
 #    Schema: org.gnome.desktop.interface
