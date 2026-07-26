@@ -414,17 +414,9 @@ A: That path existed in Ubuntu 24.04 (noble) but was removed in Ubuntu 26.04 (re
 ---
 
 
-### How to verify a package is safe to pin
+## Contributing
 
-```bash
-# What hard-depends on the package?
-apt-cache rdepends --installed <package>
-
-# Is it a hard dep of any critical package?
-apt-cache rdepends --installed <package> | grep -E 'gnome-shell|gdm3|gnome-session|gnome-control-center|ubuntu-server'
-
-# If the second command returns anything, DO NOT pin or remove the package.
-```
+See [CONTRIBUTING.md](CONTRIBUTING.md) for how to report bugs, verify packages, and submit pull requests.
 
 ---
 
