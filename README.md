@@ -60,7 +60,7 @@ This script removes all of that and gives you **pure upstream GNOME 50** — the
 # 1. Boot your fresh Ubuntu 26.04 Server install
 
 # 2. Run the script directly
-curl -fsSL https://raw.githubusercontent.com/ninxdev/ubuntu-debloat/main/debloat.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/itsnin/linops/main/debloat.sh | sudo bash
 
 # 3. Reboot
 sudo reboot
