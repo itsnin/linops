@@ -22,7 +22,7 @@ without making you spend time configuring things
 ## run
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/itsnin/linops/develop/scripts/start.sh | sh
+curl -fsSL https://raw.githubusercontent.com/itsnin/linops/main/scripts/start.sh | sh
 ```
 
 downloads linops to a temp file runs it then deletes it
