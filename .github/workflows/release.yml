@@ -2,7 +2,7 @@ name: release
 
 on:
   push:
-    branches: [develop]
+    branches: [main]
 
 jobs:
   release:
@@ -39,7 +39,7 @@ jobs:
         with:
           tag_name: continuous
           name: continuous build
-          body: auto-generated build from develop branch
+          body: auto-generated build from main branch
           prerelease: true
           files: |
             linops
