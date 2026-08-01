@@ -1,8 +1,0 @@
-[Desktop Entry]
-Type=Application
-Name=LinOps
-Comment=Linux Operations modular system management
-Exec=linops
-Icon=linops
-Categories=System;Settings;
-Terminal=true
