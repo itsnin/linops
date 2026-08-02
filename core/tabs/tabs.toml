@@ -1,0 +1,8 @@
+directories = [
+    "package_management",
+    "system_management",
+    "networking_security",
+    "dev_toolchain",
+    "performance_gaming",
+    "environment",
+]

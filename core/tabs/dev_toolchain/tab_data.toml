@@ -1,0 +1,6 @@
+name = "Development Toolchain"
+
+# scaffold only entries not written yet
+# task dev_toolchain already has a .sh file in its folder see
+# LLM.md status section it is a scaffold comment only no real
+# commands yet

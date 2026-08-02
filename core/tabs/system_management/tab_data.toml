@@ -1,0 +1,7 @@
+name = "System Management"
+
+# scaffold only entries not written yet
+# tasks snap_debloat apt_pins system_update apt_cleanup kdump_removal
+# upstream_gnome gnome_debloat each already has a .sh file in its
+# folder see LLM.md status section snap_debloat/snapd.sh has real
+# verified content the rest are scaffold comments only

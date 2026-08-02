@@ -1,0 +1,4 @@
+name = "Environment"
+
+# empty category on purpose exists and is visible in the ui but
+# has no tasks yet do not populate speculatively see LLM.md

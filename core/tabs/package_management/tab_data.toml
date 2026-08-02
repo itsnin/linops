@@ -1,0 +1,5 @@
+name = "Package Management"
+
+# scaffold only entries not written yet
+# tasks web_browser system_util fonts virtualization editor gnome_ext
+# each already has a .sh file in its folder see LLM.md status section

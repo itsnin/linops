@@ -1,0 +1,16 @@
+[package]
+name = "linops_core"
+description = "The backend of linops distro detection and the tabs task tree"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"
+anyhow = "1"
+thiserror = "1"
+include_dir = "0.7"
+
+[dev-dependencies]
